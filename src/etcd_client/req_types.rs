@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
+use crate::etcd_client;
 
 //==========|  TRANSACTION  |============
 
 #[derive(Serialize, Deserialize)]
-pub struct Transaction {
+pub(in etcd_client) struct Transaction {
     pub compare: Vec<Comparison>,
     pub success: Vec<OperationRequest>,
     pub failure: Vec<OperationRequest>,
@@ -11,7 +12,7 @@ pub struct Transaction {
 
 
 #[derive(Serialize, Deserialize)]
-pub struct Comparison {
+pub(in etcd_client) struct Comparison {
     pub key: String,
     pub result: CompareResult,
 
@@ -22,7 +23,7 @@ pub struct Comparison {
 
 
 #[derive(Serialize, Deserialize)]
-pub enum CompareResult {
+pub(in etcd_client) enum CompareResult {
     EQUAL,
     GREATER,
     LESS,
@@ -31,7 +32,7 @@ pub enum CompareResult {
 
 
 #[derive(Serialize, Deserialize)]
-pub enum CompareTarget {
+pub(in etcd_client) enum CompareTarget {
     VERSION,
     CREATE,
     MOD,
@@ -40,7 +41,7 @@ pub enum CompareTarget {
 
 
 #[derive(Serialize, Deserialize)]
-pub enum Target {
+pub(in etcd_client) enum Target {
     #[serde(rename = "version")]
     Version(u64),
 
@@ -57,7 +58,7 @@ pub enum Target {
 
 
 #[derive(Serialize, Deserialize)]
-pub enum OperationRequest {
+pub(in etcd_client) enum OperationRequest {
     #[serde(rename = "requestPut")]
     Put(RequestPut),
 
@@ -71,13 +72,13 @@ pub enum OperationRequest {
 
 
 #[derive(Serialize, Deserialize)]
-pub struct RequestRange {
+pub(in etcd_client) struct RequestRange {
     pub key: String,
 }
 
 
 #[derive(Serialize, Deserialize)]
-pub struct RequestPut {
+pub(in etcd_client) struct RequestPut {
     pub key: String,
     pub value: String,
 }

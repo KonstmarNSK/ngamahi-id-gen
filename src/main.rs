@@ -6,7 +6,6 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_web::web::BufMut;
 use awc::error::{PayloadError, SendRequestError};
 use crate::etcd_client::{EtcdClient, EtcdErr};
-use crate::r#mod::EtcdClient;
 
 
 #[actix_web::main]

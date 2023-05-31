@@ -5,7 +5,7 @@ mod operations;
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _, engine::{self, general_purpose}, alphabet};
 use operations::{execute_tx, get_range};
-use crate::etcd_client::operations::{CreateSeqTx, EnlargeSeqTx};
+use crate::etcd_client::operations::{CreateSeqTx, CreateSeqTxErr, EnlargeSeqTx, EnlargeTxErr};
 use crate::Range;
 
 // use std::cell::RefCell;
@@ -19,7 +19,7 @@ use crate::Range;
 #[derive(Clone)]
 pub struct EtcdClient {
     pub client: awc::Client,
-    pub host_addr: String
+    pub host_addr: String,
 }
 
 impl EtcdClient {
@@ -28,34 +28,41 @@ impl EtcdClient {
 
         let mut old_value = get_range(seq_name.clone(), &self.client, self.host_addr.clone()).await;
 
-
-        for _ in 0..5 { //todo: make a constant
+        for _ in 0..5 { //todo: make a property
             let new_value = old_value + (range_size as u64);
 
             let tx = EnlargeSeqTx::new(seq_name.clone(), old_value, new_value);
-            let tx_result = execute_tx(&tx, &self.client, self.host_addr.clone()).await;
+            let tx_result = tx.exec(self.host_addr.clone(), &self.client).await;
 
-            if tx_result.succeeded() {
-                return Ok(Range{ begin: old_value, end: new_value })
+            match tx_result {
+                Err(EnlargeTxErr::StaleSequenceNum { new_num }) => old_value = new_num,
+                Err(other) => return Err(EtcdErr::EnlargeTxErr(other)),
+
+                Ok(_) => return Ok(Range { begin: old_value, end: new_value }),
             }
-
-            old_value = tx_result.old_value().unwrap();
         };
 
         Err(EtcdErr::OptimisticTxFailed)
     }
 
 
-    pub async fn create_seq(&self, seq_name: String) -> () {
+    pub async fn create_seq(&self, seq_name: String) -> Result<(), EtcdErr> {
         let tx = CreateSeqTx::new(seq_name);
-        execute_tx(&tx, &self.client, self.host_addr.clone()).await;
+        Ok(tx.exec(self.host_addr.clone(), &self.client).await?)
     }
 }
 
 
+pub enum EtcdErr {
+    OptimisticTxFailed,
+    EnlargeTxErr(EnlargeTxErr), // todo: rename
+    CreateSeqErr(CreateSeqTxErr),
+}
 
-pub enum EtcdErr{
-    OptimisticTxFailed
+impl From<CreateSeqTxErr> for EtcdErr {
+    fn from(value: CreateSeqTxErr) -> Self {
+        Self::CreateSeqErr(value)
+    }
 }
 
 

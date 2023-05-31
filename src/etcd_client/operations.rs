@@ -1,11 +1,15 @@
 use std::io::Read;
+use awc::error::{JsonPayloadError, SendRequestError};
 use base64::{Engine as _, engine::{self, general_purpose}, alphabet};
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde_json::Error;
 use crate::etcd_client::req_types::{CompareResult, CompareTarget, Comparison, OperationRequest, RequestPut, RequestRange, Target, Transaction};
 use crate::etcd_client::resp_types::{RangeResponse, TxCreateSeqResp, TxEnlargeSeqResp};
 
 
 
+/// Get current value of given sequence
 pub async fn get_range(seq_id: String, client: &awc::Client, host: String) -> u64 {
 
     let url = host + "/v3/kv/range";
@@ -20,41 +24,13 @@ pub async fn get_range(seq_id: String, client: &awc::Client, host: String) -> u6
     let mut res = req.send_body(body).await.unwrap();
     let payload = res.json::<RangeResponse>().limit(2000).await.unwrap();
 
-    return u64::from_str(&payload.kvs.first().unwrap().unwrap().value).unwrap();
+    return u64::from_str_radix(&payload.kvs.first().unwrap().value.clone().unwrap(), 10).unwrap();
 }
 
 
 
 
-
-pub async fn execute_tx<TTx: TxWrapper>(tx: &TTx, client: &awc::Client, host: String) -> TTx::ResponseWrapper {
-    let tx = serde_json::to_string(tx).unwrap();
-
-    // construct request
-    let req = client.post(format!("{}/v3/kv/txn", host))
-        .insert_header(("User-Agent", "awc/3.0"));
-
-    // send request and await response
-    let mut res = req.send_body(tx).await.unwrap();
-    let res = res.json::<TTx::Response>().limit(2000).await.unwrap();
-
-    TTx::ResponseWrapper::new(res)
-}
-
-
-
-
-
-
-// transaction (request) wrappers:
-
-pub trait TxWrapper {
-    type Response: Deserialize;
-    type ResponseWrapper: TxRespWrapper;
-
-    fn get_tx(self) -> Transaction;
-}
-
+// ===========| Transactions |=============
 
 pub struct EnlargeSeqTx{
     tx: Transaction
@@ -65,21 +41,90 @@ pub struct CreateSeqTx{
 }
 
 
-impl TxWrapper for EnlargeSeqTx {
-    type Response = TxEnlargeSeqResp;
-    type ResponseWrapper = EnlargeSeqTxRespWrapper;
 
-    fn get_tx(self) -> Transaction {
-        self.tx
+
+impl EnlargeSeqTx {
+
+    pub async fn exec(self, host: String, client: &awc::Client) -> Result<(), EnlargeTxErr> {
+
+        let tx = serde_json::to_string(&self.tx)?;
+
+        let req = client.post(format!("{}/v3/kv/txn", host))
+            .insert_header(("User-Agent", "id-gen/1.0"));
+
+        let mut res = req.send_body(tx).await?;
+        let res = res.json::<TxEnlargeSeqResp>().limit(2000).await?;
+
+
+        if let Some(true) = res.succeeded {
+            Ok(())
+        } else {
+            Err(
+                EnlargeTxErr::StaleSequenceNum { new_num: old_value(res).unwrap()}
+            )
+        }
+
+
+        fn old_value(res: TxEnlargeSeqResp) -> Option<u64> {
+            return res.responses.first()
+                .map(| res| res.response_range)
+                .flatten()
+                .map(|range| range.kvs.first())
+                .flatten()
+                .map(|range| range.value)// base64-encoded
+                .flatten()
+                .map(|str_value| decode(str_value));
+
+
+            fn decode(str_val: String) -> u64 {
+                let bytes = general_purpose::STANDARD.decode(str_val).unwrap();
+
+                u64::from_be_bytes(bytes.try_into().unwrap())
+            }
+        }
     }
 }
 
-impl TxWrapper for CreateSeqTx {
-    type Response = TxCreateSeqResp;
-    type ResponseWrapper = CreateSeqTxRespWrapper;
 
-    fn get_tx(self) -> Transaction {
-        self.tx
+
+impl CreateSeqTx {
+
+    pub async fn exec(self, host: String, client: &awc::Client) -> Result<(), CreateSeqTxErr> {
+        let tx = serde_json::to_string(&self.tx)?;
+
+        let req = client.post(format!("{}/v3/kv/txn", host))
+            .insert_header(("User-Agent", "id-gen/1.0"));
+
+        let mut res = req.send_body(tx).await?;
+        let res = res.json::<TxCreateSeqResp>().limit(2000).await?;
+
+
+        if let Some(true) = res.succeeded {
+            Ok(())
+        } else {
+            Err(
+                CreateSeqTxErr::SeqAlreadyExists { seq_value: old_value(res).unwrap()}
+            )
+        }
+
+
+        fn old_value(res: TxCreateSeqResp) -> Option<u64> {
+            return res.responses.first()
+                .map(| res| res.response_range)
+                .flatten()
+                .map(|range| range.kvs.first())
+                .flatten()
+                .map(|range| range.value)// base64-encoded
+                .flatten()
+                .map(|str_value| decode(str_value));
+
+
+            fn decode(str_val: String) -> u64 {
+                let bytes = general_purpose::STANDARD.decode(str_val).unwrap();
+
+                u64::from_be_bytes(bytes.try_into().unwrap())
+            }
+        }
     }
 }
 
@@ -87,80 +132,7 @@ impl TxWrapper for CreateSeqTx {
 
 
 
-
-// transaction responses wrappers:
-
-
-pub trait TxRespWrapper {
-    type TxResp;
-
-    fn new(tx_resp: Self::TxResp) -> Self;
-}
-
-
-pub struct EnlargeSeqTxRespWrapper {
-    resp: TxEnlargeSeqResp,
-}
-
-pub struct CreateSeqTxRespWrapper {
-    resp: TxCreateSeqResp,
-}
-
-impl TxRespWrapper for EnlargeSeqTxRespWrapper {
-    type TxResp = TxEnlargeSeqResp;
-
-    fn new(tx_resp: Self::TxResp) -> Self {
-        Self {
-            resp: tx_resp
-        }
-    }
-}
-
-impl TxRespWrapper for CreateSeqTxRespWrapper {
-    type TxResp = TxCreateSeqResp;
-
-    fn new(tx_resp: Self::TxResp) -> Self {
-        Self {
-            resp: tx_resp
-        }
-    }
-}
-
-
-impl EnlargeSeqTxRespWrapper {
-    pub fn succeeded(&self) -> bool {
-        self.resp.succeeded.unwrap_or(false)
-    }
-
-    pub fn old_value(&self) -> Option<u64> {
-        return self.resp.responses.first()
-            .map(| res| res.response_range)
-            .flatten()
-            .map(|range| range.kvs.first())
-            .flatten()
-            .map(|range| range.value)// base64-encoded
-            .flatten()
-            .map(|str_value| decode(str_value));
-
-
-        fn decode(str_val: String) -> u64 {
-            let bytes = general_purpose::STANDARD.decode(str_value).unwrap();
-
-            u64::from_be_bytes(bytes.try_into().unwrap())
-        }
-    }
-}
-
-
-//====================================
-
-
-
-
-
-
-
-// transactions:
+// Transactions creation:
 
 impl EnlargeSeqTx {
     pub fn new(sequence_name: String, old_value: u64, new_value: u64) -> Self {
@@ -228,6 +200,69 @@ impl CreateSeqTx {
 }
 
 
+
+
+
+// =========| ERRORS |=========
+
+pub enum EnlargeTxErr{
+    StaleSequenceNum{ new_num: u64 }, // todo: rename
+    SendReqErr(SendRequestError),
+    SerializationErr(Error),
+    DeserializationErr(JsonPayloadError),
+}
+
+pub enum CreateSeqTxErr{
+    SeqAlreadyExists{ seq_value: u64 },
+    SendReqErr(SendRequestError),
+    SerializationErr(Error),
+    DeserializationErr(JsonPayloadError),
+}
+
+
+// =========| Errors conversions |==========
+
+
+// Enlarge tx:
+
+impl From<Error> for EnlargeTxErr {
+    fn from(value: Error) -> Self {
+        Self::SerializationErr(value)
+    }
+}
+
+impl From<SendRequestError> for EnlargeTxErr {
+    fn from(value: SendRequestError) -> Self {
+        Self::SendReqErr(value)
+    }
+}
+
+impl From<JsonPayloadError> for EnlargeTxErr {
+    fn from(value: JsonPayloadError) -> Self {
+        Self::DeserializationErr(value)
+    }
+}
+
+
+// CreateSeq tx:
+
+impl From<Error> for CreateSeqTxErr {
+    fn from(value: Error) -> Self {
+        Self::SerializationErr(value)
+    }
+}
+
+impl From<SendRequestError> for CreateSeqTxErr {
+    fn from(value: SendRequestError) -> Self {
+        Self::SendReqErr(value)
+    }
+}
+
+impl From<JsonPayloadError> for CreateSeqTxErr {
+    fn from(value: JsonPayloadError) -> Self {
+        Self::DeserializationErr(value)
+    }
+}
 
 
 

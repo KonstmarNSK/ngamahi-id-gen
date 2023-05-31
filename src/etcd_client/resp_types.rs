@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 
 #[derive(Serialize, Deserialize)]
-pub struct Header {
+pub(in etcd_client) struct Header {
     pub cluster_id: Option<String>,
     pub member_id: Option<String>,
     pub revision: Option<String>,
@@ -13,7 +13,7 @@ pub struct Header {
 //===========|  RANGE  |=============
 
 #[derive(Serialize, Deserialize)]
-pub struct RangeResult {
+pub(in etcd_client) struct RangeResult {
     pub key: Option<String>,
     pub create_revision: Option<String>,
     pub mod_revision: Option<String>,
@@ -23,7 +23,7 @@ pub struct RangeResult {
 
 
 #[derive(Serialize, Deserialize)]
-pub struct RangeResponse {
+pub(in etcd_client) struct RangeResponse {
     pub header: Header,
     pub kvs: Vec<RangeResult>,
     pub count: String,
@@ -37,7 +37,7 @@ pub struct RangeResponse {
 //============|  PUT  |==================
 
 #[derive(Serialize, Deserialize)]
-pub struct ResponsePut {
+pub(in etcd_client) struct ResponsePut {
     pub header: Header,
 }
 
@@ -49,15 +49,10 @@ pub struct ResponsePut {
 //=============| TX CREATE SEQ RESPONSE  |======================
 
 #[derive(Serialize, Deserialize)]
-pub struct PutResult {
-    pub response_put: ResponsePut,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct TxCreateSeqResp {
+pub(in etcd_client) struct TxCreateSeqResp {
     pub header: Header,
     pub succeeded: Option<bool>,
-    pub responses: Vec<PutResult>,
+    pub responses: Vec<OperationResult>,
 }
 
 //===============================================================
@@ -69,20 +64,20 @@ pub struct TxCreateSeqResp {
 //=============| TX ENLARGE SEQ RESPONSE  |======================
 
 #[derive(Serialize, Deserialize)]
-pub struct ResponseRange {
+pub(in etcd_client) struct ResponseRange {
     pub header: Header,
     pub kvs: Vec<RangeResult>,
     pub count: String,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct OperationResult {
+pub(in etcd_client) struct OperationResult {
     pub response_range: Option<ResponseRange>,
     pub response_put: Option<ResponsePut>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct TxEnlargeSeqResp {
+pub(in etcd_client) struct TxEnlargeSeqResp {
     pub header: Header,
     pub succeeded: Option<bool>,
     pub responses: Vec<OperationResult>,
