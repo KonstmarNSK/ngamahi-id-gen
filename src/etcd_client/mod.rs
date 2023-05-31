@@ -4,8 +4,8 @@ mod operations;
 
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _, engine::{self, general_purpose}, alphabet};
-use operations::{execute_tx, get_range};
-use crate::etcd_client::operations::{CreateSeqTx, CreateSeqTxErr, EnlargeSeqTx, EnlargeTxErr};
+use operations::get_range;
+use crate::etcd_client::operations::{CreateSeqTx, CreateSeqTxErr, EnlargeSeqTx, EnlargeTxErr, GetRangeErr};
 use crate::Range;
 
 // use std::cell::RefCell;
@@ -26,7 +26,7 @@ impl EtcdClient {
 
     pub async fn next_range(&self, seq_name: String, range_size: u32) -> Result<Range, EtcdErr> {
 
-        let mut old_value = get_range(seq_name.clone(), &self.client, self.host_addr.clone()).await;
+        let mut old_value = get_range(seq_name.clone(), &self.client, self.host_addr.clone()).await?;
 
         for _ in 0..5 { //todo: make a property
             let new_value = old_value + (range_size as u64);
@@ -53,15 +53,23 @@ impl EtcdClient {
 }
 
 
+#[derive(Debug)]
 pub enum EtcdErr {
     OptimisticTxFailed,
     EnlargeTxErr(EnlargeTxErr), // todo: rename
     CreateSeqErr(CreateSeqTxErr),
+    NoSuchRangeErr(GetRangeErr),
 }
 
 impl From<CreateSeqTxErr> for EtcdErr {
     fn from(value: CreateSeqTxErr) -> Self {
         Self::CreateSeqErr(value)
+    }
+}
+
+impl From<GetRangeErr> for EtcdErr {
+    fn from(value: GetRangeErr) -> Self {
+        Self::NoSuchRangeErr(value)
     }
 }
 

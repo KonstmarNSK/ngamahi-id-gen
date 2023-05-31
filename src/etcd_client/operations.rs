@@ -10,21 +10,35 @@ use crate::etcd_client::resp_types::{RangeResponse, TxCreateSeqResp, TxEnlargeSe
 
 
 /// Get current value of given sequence
-pub async fn get_range(seq_id: String, client: &awc::Client, host: String) -> u64 {
+pub async fn get_range(seq_id: String, client: &awc::Client, host: String) -> Result<u64, GetRangeErr> {
 
     let url = host + "/v3/kv/range";
-    let encoded_seq_name = general_purpose::STANDARD.encode(seq_id);
+    let encoded_seq_name = general_purpose::STANDARD.encode(seq_id.clone());
     let body = RequestRange { key: encoded_seq_name };
     let body = serde_json::to_string(&body).unwrap();
 
     // construct request
-    let req = client.post(url).insert_header(("User-Agent", "awc/3.0"));
+    let req = client.post(url).insert_header(("User-Agent", "id-gen/1.0"));
 
     // send request and await response
     let mut res = req.send_body(body).await.unwrap();
     let payload = res.json::<RangeResponse>().limit(2000).await.unwrap();
 
-    return u64::from_str_radix(&payload.kvs.first().unwrap().value.clone().unwrap(), 10).unwrap();
+    let next_range_start = payload.kvs
+        .map(|value| { value.first().cloned() })
+        .flatten()
+        .map(|value| { value.value.clone() })
+        .flatten();
+
+
+    match &next_range_start {
+        Some(num) => {
+            let next_range_start = general_purpose::STANDARD.decode(num).unwrap();
+            return Ok(u64::from_be_bytes(next_range_start.try_into().unwrap()));
+        }
+
+        None => Err(GetRangeErr::NoSuchSeq(seq_id))
+    }
 }
 
 
@@ -56,20 +70,20 @@ impl EnlargeSeqTx {
         let res = res.json::<TxEnlargeSeqResp>().limit(2000).await?;
 
 
-        if let Some(true) = res.succeeded {
+        return if let Some(true) = res.succeeded {
             Ok(())
         } else {
             Err(
-                EnlargeTxErr::StaleSequenceNum { new_num: old_value(res).unwrap()}
+                EnlargeTxErr::StaleSequenceNum { new_num: old_value(res).unwrap() }
             )
-        }
+        };
 
 
-        fn old_value(res: TxEnlargeSeqResp) -> Option<u64> {
-            return res.responses.first()
-                .map(| res| res.response_range)
+        fn old_value(mut res: TxEnlargeSeqResp) -> Option<u64> {
+            return res.responses.first_mut()
+                .map(| res| res.response_range.take())
                 .flatten()
-                .map(|range| range.kvs.first())
+                .map(|range| range.kvs.first().cloned())
                 .flatten()
                 .map(|range| range.value)// base64-encoded
                 .flatten()
@@ -96,23 +110,23 @@ impl CreateSeqTx {
             .insert_header(("User-Agent", "id-gen/1.0"));
 
         let mut res = req.send_body(tx).await?;
-        let res = res.json::<TxCreateSeqResp>().limit(2000).await?;
+        let mut res = res.json::<TxCreateSeqResp>().limit(2000).await?;
 
 
-        if let Some(true) = res.succeeded {
+        return if let Some(true) = res.succeeded {
             Ok(())
         } else {
             Err(
                 CreateSeqTxErr::SeqAlreadyExists { seq_value: old_value(res).unwrap()}
             )
-        }
+        };
 
 
-        fn old_value(res: TxCreateSeqResp) -> Option<u64> {
-            return res.responses.first()
-                .map(| res| res.response_range)
+        fn old_value(mut res: TxCreateSeqResp) -> Option<u64> {
+            return res.responses.first_mut()
+                .map(| res| res.response_range.take())
                 .flatten()
-                .map(|range| range.kvs.first())
+                .map(|range| range.kvs.first().cloned())
                 .flatten()
                 .map(|range| range.value)// base64-encoded
                 .flatten()
@@ -205,6 +219,7 @@ impl CreateSeqTx {
 
 // =========| ERRORS |=========
 
+#[derive(Debug)]
 pub enum EnlargeTxErr{
     StaleSequenceNum{ new_num: u64 }, // todo: rename
     SendReqErr(SendRequestError),
@@ -212,6 +227,7 @@ pub enum EnlargeTxErr{
     DeserializationErr(JsonPayloadError),
 }
 
+#[derive(Debug)]
 pub enum CreateSeqTxErr{
     SeqAlreadyExists{ seq_value: u64 },
     SendReqErr(SendRequestError),
@@ -219,6 +235,10 @@ pub enum CreateSeqTxErr{
     DeserializationErr(JsonPayloadError),
 }
 
+#[derive(Debug)]
+pub enum GetRangeErr{
+    NoSuchSeq(String),
+}
 
 // =========| Errors conversions |==========
 

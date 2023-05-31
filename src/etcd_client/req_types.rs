@@ -4,7 +4,7 @@ use crate::etcd_client;
 //==========|  TRANSACTION  |============
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) struct Transaction {
+pub(in crate::etcd_client) struct Transaction {
     pub compare: Vec<Comparison>,
     pub success: Vec<OperationRequest>,
     pub failure: Vec<OperationRequest>,
@@ -12,7 +12,7 @@ pub(in etcd_client) struct Transaction {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) struct Comparison {
+pub(in crate::etcd_client) struct Comparison {
     pub key: String,
     pub result: CompareResult,
 
@@ -23,7 +23,7 @@ pub(in etcd_client) struct Comparison {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) enum CompareResult {
+pub(in crate::etcd_client) enum CompareResult {
     EQUAL,
     GREATER,
     LESS,
@@ -32,7 +32,7 @@ pub(in etcd_client) enum CompareResult {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) enum CompareTarget {
+pub(in crate::etcd_client) enum CompareTarget {
     VERSION,
     CREATE,
     MOD,
@@ -41,7 +41,7 @@ pub(in etcd_client) enum CompareTarget {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) enum Target {
+pub(in crate::etcd_client) enum Target {
     #[serde(rename = "version")]
     Version(u64),
 
@@ -58,7 +58,7 @@ pub(in etcd_client) enum Target {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) enum OperationRequest {
+pub(in crate::etcd_client) enum OperationRequest {
     #[serde(rename = "requestPut")]
     Put(RequestPut),
 
@@ -72,13 +72,13 @@ pub(in etcd_client) enum OperationRequest {
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) struct RequestRange {
+pub(in crate::etcd_client) struct RequestRange {
     pub key: String,
 }
 
 
 #[derive(Serialize, Deserialize)]
-pub(in etcd_client) struct RequestPut {
+pub(in crate::etcd_client) struct RequestPut {
     pub key: String,
     pub value: String,
 }

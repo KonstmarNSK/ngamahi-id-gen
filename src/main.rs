@@ -39,23 +39,25 @@ async fn get_app_data() -> Result<AppData, Infallible> {
 #[get("/sequence/{seq}")]
 async fn get_next_range(data: web::Data<AppData>, path: web::Path<String>) -> impl Responder {
     let seq_id = path.into_inner();
-    let next_range = data.seq_provider.get_next_range(seq_id);
+    let next_range = data.seq_provider.get_next_range(seq_id).await;
 
     match next_range {
         Ok(seq) => HttpResponse::Ok().body(format!("{}:{}", seq.begin, seq.end)),
-        Err(SeqReadErr::NoSeqFound(seq)) => HttpResponse::NotFound().body(format!("No such sequence '{}'", seq))
+        Err(err) => HttpResponse::NotFound().body(format!("Error: '{:?}'", err))
     }
 }
 
 #[post("/sequence/{seq}")]
 async fn create_seq(data: web::Data<AppData>, path: web::Path<String>) -> impl Responder {
     let seq_id = path.into_inner();
-    let result = data.seq_provider.create_sequence(seq_id);
+    let result = data.seq_provider.create_sequence(seq_id.clone()).await;
+
+    // HttpResponse::Ok().body(format!("Sequence '{}' created successfully", seq_id.clone()))
 
     match result {
-        Ok(()) => HttpResponse::Ok().body(format!("Sequence '{}' created successfully", seq_id)),
-        Err(SeqCreationErr::SomeErr(seq)) =>
-            HttpResponse::InternalServerError().body(format!("Something bad happened. Unable to create sequence '{}'", seq))
+        Ok(_) => HttpResponse::Ok().body(format!("Sequence '{}' created successfully", seq_id)),
+        Err(err) =>
+            HttpResponse::InternalServerError().body(format!("Something bad happened. Unable to create sequence '{:?}'", err))
     }
 }
 
@@ -66,7 +68,7 @@ struct AppData {
     seq_provider: RangeProvider,
 }
 
-pub(crate) struct Range {
+pub struct Range {
     begin: u64,
     end: u64,
 }
@@ -78,21 +80,11 @@ struct RangeProvider {
 
 
 impl RangeProvider {
-    async fn get_next_range(&self, seq_id: String) -> Result<Range, SeqReadErr> {
+    async fn get_next_range(&self, seq_id: String) -> Result<Range, EtcdErr> {
         self.etcd_client.next_range(seq_id, 500).await
-            .map_err(|e| SeqReadErr::EtcdErr(e))
     }
 
-    async fn create_sequence(&self, seq_id: String) -> () {
+    async fn create_sequence(&self, seq_id: String) -> Result<(), EtcdErr> {
         self.etcd_client.create_seq(seq_id).await
     }
-}
-
-
-enum SeqReadErr {
-    EtcdErr(EtcdErr)
-}
-
-enum SeqCreationErr {
-    SomeErr(String)
 }
