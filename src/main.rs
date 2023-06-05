@@ -1,4 +1,5 @@
 mod etcd_client;
+mod cache;
 
 use std::convert::Infallible;
 use std::future::Future;
@@ -10,7 +11,6 @@ use crate::etcd_client::{EtcdClient, EtcdErr};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
     HttpServer::new(move || {
         App::new()
             .data_factory(get_app_data)
@@ -23,17 +23,14 @@ async fn main() -> std::io::Result<()> {
 }
 
 
-
 async fn get_app_data() -> Result<AppData, Infallible> {
-
     let client = awc::Client::default();
-    let client = EtcdClient{ client, host_addr: "http://localhost:2379".to_string() };
+    let client = EtcdClient { client, host_addr: "http://localhost:2379".to_string() };
 
     let app_data = AppData { seq_provider: RangeProvider { etcd_client: client } };
 
     Ok(app_data.clone())
 }
-
 
 
 #[get("/sequence/{seq}")]
@@ -62,12 +59,12 @@ async fn create_seq(data: web::Data<AppData>, path: web::Path<String>) -> impl R
 }
 
 
-
 #[derive(Clone)]
 struct AppData {
     seq_provider: RangeProvider,
 }
 
+#[derive(Clone)]
 pub struct Range {
     begin: u64,
     end: u64,
@@ -75,7 +72,7 @@ pub struct Range {
 
 #[derive(Clone)]
 struct RangeProvider {
-    etcd_client: EtcdClient
+    etcd_client: EtcdClient,
 }
 
 
@@ -87,4 +84,36 @@ impl RangeProvider {
     async fn create_sequence(&self, seq_id: String) -> Result<(), EtcdErr> {
         self.etcd_client.create_seq(seq_id).await
     }
+}
+
+
+#[actix_web::test]
+pub async fn do_test() {
+    assert_eq!(2 + 2, 4);
+
+    println!("creating cache");
+
+    let cache = cache::new_cache();
+
+    let rng = Range {
+        begin: 0,
+        end: 100
+    };
+
+    println!("putting");
+
+    cache.put_range("some-seq".to_string(),rng );
+
+    let from_cache = cache.get_range("some-seq".to_string(), 100).await;
+
+    assert_eq!(from_cache.0.len(), 1);
+
+    let range_from_cache = from_cache.0.first().unwrap();
+    let needed = from_cache.1;
+
+    println!("Got range: {} to {}, needed {}", range_from_cache.begin, range_from_cache.end, needed);
+
+    assert_eq!(0, range_from_cache.begin);
+    assert_eq!(100, range_from_cache.end);
+    assert_eq!(0, needed);
 }

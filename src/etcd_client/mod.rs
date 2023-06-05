@@ -8,13 +8,6 @@ use operations::get_range;
 use crate::etcd_client::operations::{CreateSeqTx, CreateSeqTxErr, EnlargeSeqTx, EnlargeTxErr, GetRangeErr};
 use crate::Range;
 
-// use std::cell::RefCell;
-// use std::thread;
-//
-// thread_local! {
-//     static CLIENT: RefCell<f32> = RefCell::new(awc::Client);
-// }
-
 
 #[derive(Clone)]
 pub struct EtcdClient {
