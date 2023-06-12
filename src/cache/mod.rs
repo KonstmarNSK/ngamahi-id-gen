@@ -50,7 +50,8 @@ pub fn new_cache() -> CacheClient {
             match cmd {
                 Command::GetRange(mut get_cmd) => {
                     println!("trying to get range from cache");
-                    let result = get_range(get_cmd.seq_name, get_cmd.range_size, &mut cache.ranges);
+                    let result =  get_range(get_cmd.seq_name, get_cmd.range_size, &mut cache.ranges);
+                    let result = Box::new(result);
                     get_cmd.response.set_result(result);
                 },
 
@@ -76,11 +77,13 @@ fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Rang
     let mut ranges = map.get_mut(&seq_name).unwrap();
     let mut result = Vec::with_capacity(2);
 
+    // sum size of already taken ranges
     let mut total = 0_u64;
 
     loop {
         let needed_size = range_size - total;
 
+        // no need for another range
         if needed_size == 0 {
             return (result, needed_size);
         }
@@ -95,6 +98,8 @@ fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Rang
         let range_size = get_range_size(&next_range);
 
         match needed_size.cmp(&range_size) {
+            // if a range from cache is bigger than needed, we split it in two smaller ranges,
+            // returning one and pushing back to cache another
             Ordering::Less => {
                 total += needed_size;
 
@@ -103,17 +108,20 @@ fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Rang
                 ranges.push(right);
             }
 
+            // if cache contains a range that is smaller than needed, we take it and remember
+            // its size for next iteration
+            Ordering::Greater => {
+                total += get_range_size(&next_range);
+
+                result.push(next_range);
+            }
+
             Ordering::Equal => {
                 total += needed_size;
 
                 result.push(next_range)
             }
 
-            Ordering::Greater => {
-                total += get_range_size(&next_range);
-
-                result.push(next_range);
-            }
         }
     }
 
@@ -150,8 +158,6 @@ pub(in crate::cache) enum Command {
     Stop,
 }
 
-unsafe impl Send for Command{}
-unsafe impl Sync for Command{}
 
 struct GetRange {
     seq_name: String,

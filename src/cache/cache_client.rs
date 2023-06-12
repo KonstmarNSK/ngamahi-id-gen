@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use crate::cache::cache_response::CacheResult;
 use crate::cache::{Command, GetRange, PutRange};
@@ -20,10 +21,11 @@ impl CacheClient {
         };
 
 
-        self.sender.send(Command::GetRange(command));
+        self.sender.send(Command::GetRange(command)).unwrap();
+
         println!("sent command, awaiting...");
 
-        cache_response.await
+        *cache_response.await
     }
 
     pub fn put_range(&self, seq_name: String, range: Range) -> () {
@@ -32,6 +34,10 @@ impl CacheClient {
             range
         };
 
-        self.sender.send(Command::PutRange(cmd));
+        self.sender.send(Command::PutRange(cmd)).unwrap();
+    }
+
+    pub fn stop(self) {
+        self.sender.send(Command::Stop).unwrap();
     }
 }

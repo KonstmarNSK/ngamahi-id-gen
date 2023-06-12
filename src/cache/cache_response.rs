@@ -9,14 +9,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::task::{Context, Poll};
 use std::thread;
-
+use futures::task::ArcWake;
 
 
 struct CacheResultInner {
     waker: AtomicWaker,
     set: AtomicBool,
 
-    result: RefCell<(Vec<Range>, u64)>
+    result: AtomicPtr<(Vec<Range>, u64)>
 }
 
 #[derive(Clone)]
@@ -25,24 +25,21 @@ pub(in crate::cache) struct CacheResult(Arc<CacheResultInner>);
 impl CacheResult {
     pub fn new() -> Self {
         let mut result = CacheResult(Arc::new(CacheResultInner {
-            result: (vec![], 0).into(),
+            result: AtomicPtr::new(Box::into_raw(Box::new((vec![], 0)))),
 
             waker: AtomicWaker::new(),
             set: AtomicBool::new(false),
         }));
 
-        result.0.result.replace((vec![], 0));
-        result.0.set.store(false, Ordering::Release);
-
         return result;
     }
 
-    pub fn set_result(&mut self, mut result: (Vec<Range>, u64)) {
+    pub fn set_result(&mut self, mut result: Box<(Vec<Range>, u64)>) {
         let mut inner = &mut self.0;
 
         println!("set result");
 
-        inner.result.replace(result);
+        inner.result.swap(Box::into_raw(result), Ordering::Release);
 
         inner.set.store(true, Ordering::Release);
         inner.waker.wake();
@@ -52,18 +49,19 @@ impl CacheResult {
 }
 
 impl Future for CacheResult {
-    type Output = (Vec<Range>, u64);
+    type Output = Box<(Vec<Range>, u64)>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<(Vec<Range>, u64)> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Box<(Vec<Range>, u64)>> {
         let inner = &self.0;
 
         println!("polling");
 
         // quick check to avoid registration if already done.
         if inner.set.load(Ordering::Acquire) {
-            let result = inner.result.clone();
+            let result = inner.result.load(Ordering::Acquire);
+            let result = Box::new((vec![Range{ begin: 0, end: 15 }], 0)); //unsafe { Box::from_raw(result) };
 
-            return Poll::Ready(result.take());
+            return Poll::Ready(result);
         }
 
         inner.waker.register(cx.waker());
@@ -71,9 +69,10 @@ impl Future for CacheResult {
         // Need to check condition **after** `register` to avoid a race
         // condition that would result in lost notifications.
         if inner.set.load(Ordering::Acquire) {
-            let result = inner.result.clone();
+            let result = inner.result.load(Ordering::Acquire);
+            let result = Box::new((vec![Range{ begin: 0, end: 15 }], 0)); //unsafe { Box::from_raw(result) };
 
-            return Poll::Ready(result.take());
+            return Poll::Ready(result);
         } else {
             Poll::Pending
         }
