@@ -16,19 +16,21 @@ use log::{info, warn};
 use crate::config::Properties;
 use crate::range::{Range, RangeProvider};
 use crate::api_endpoints::{get_next_range, create_seq};
+use crate::cache::cache::Cache;
+use crate::cache::client::CacheClient;
 
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let props = config::read_configs().unwrap();
-    let logger_cfg = &props.logger_cfg_path;
+    let configs = config::read_configs().unwrap();
+    let logger_cfg = &configs.logs_cfg_path;
 
     log4rs::init_file(logger_cfg, Default::default()).unwrap();
 
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .app_data(Data::new(get_app_data(props.clone())))
+            .app_data(Data::new(get_app_data(configs.props.clone())))
             .service(get_next_range)
             .service(create_seq)
     })
@@ -41,8 +43,14 @@ async fn main() -> std::io::Result<()> {
 fn get_app_data(props: Properties) -> AppData {
     let client = awc::Client::default();
     let client = EtcdClient { client, host_addr: (&props.etcd_addr).clone() };
+    let cache = Cache::new();
 
-    AppData { seq_provider: RangeProvider { etcd_client: client } }
+    AppData {
+        seq_provider: RangeProvider { etcd_client: client },
+        etcd_fetch_range_size: props.etcd_fetch_range_size,
+        client_range_max_size: props.client_range_max_size,
+        cache,
+    }
 }
 
 
@@ -50,6 +58,9 @@ fn get_app_data(props: Properties) -> AppData {
 #[derive(Clone)]
 pub struct AppData {
     seq_provider: RangeProvider,
+    etcd_fetch_range_size: u64,
+    client_range_max_size: u64,
+    cache: CacheClient,
 }
 
 
@@ -74,7 +85,7 @@ pub async fn do_test() {
 
     let from_cache = cache.get("some-seq".to_string(), 100).await;
 
-    cache.stop();
+    cache.stop().await;
 
     assert_eq!(from_cache.0.len(), 1);
 

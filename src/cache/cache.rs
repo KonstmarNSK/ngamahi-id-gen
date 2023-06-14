@@ -6,6 +6,7 @@ use std::thread;
 use crate::cache::client::CacheClient;
 use crate::cache::Msg;
 use crate::Range;
+use crate::range::{get_range_size, split_range};
 
 
 type CacheMap = HashMap<String, Vec<Range>>;
@@ -73,7 +74,11 @@ fn store_range(seq_name: String, range: Range, map: &mut CacheMap) -> () {
 }
 
 fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Range>, u64) {
-    let mut ranges = map.get_mut(&seq_name).unwrap();
+    let mut ranges = match map.get_mut(&seq_name) {
+        Some(r) => r,
+        None => return (vec![], range_size)
+    };
+
     let mut result = Vec::with_capacity(2);
 
     // sum size of already taken ranges
@@ -122,33 +127,5 @@ fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Rang
             }
 
         }
-    }
-
-
-    fn get_range_size(r: &Range) -> u64 {
-        r.end - r.begin
-    }
-
-    // left's size is size, right is the rest
-    // returns none if size is bigger than one of given Range
-    fn split_range(r: Range, size: u64) -> Option<(Range, Range)> {
-        println!("Must split range {:?}. Size is {}", &r, size);
-        println!("The range size is {}", get_range_size(&r));
-
-        if get_range_size(&r) <= size {
-            return None;
-        }
-
-        let left = Range {
-            begin: r.begin,
-            end: r.begin + size,
-        };
-
-        let right = Range {
-            begin: r.begin + size + 1,
-            end: r.end
-        };
-
-        return Some((left, right));
     }
 }

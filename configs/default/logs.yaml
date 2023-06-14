@@ -17,7 +17,6 @@ root:
   level: warn
   appenders:
     - stdout
-    - warnings
 
 loggers:
   actix_server:

@@ -4,19 +4,27 @@ use std::io::BufReader;
 use std::string::ToString;
 use serde::{Deserialize};
 
+
 const CFG_PATH_ENV_KEY : &str = "ID_GEN_CFG_PATH";
 const CFG_DEFAULT_PATH: &str = "configs/default/";
+const CFG_PROPS_FILE: &str = "properties.yaml";
+const CFG_LOG_FILE: &str = "logs.yaml";
+
 
 #[derive(Deserialize, Clone)]
 pub struct Properties{
     pub etcd_addr: String,
-    pub logger_cfg_path: String,
     pub etcd_fetch_range_size: u64,
     pub client_range_max_size: u64,
 }
 
+pub struct Configs{
+    pub props: Properties,
+    pub logs_cfg_path: String,
+}
 
-pub fn read_configs() -> Result<Properties, Error> {
+
+pub fn read_configs() -> Result<Configs, Error> {
     let cfg_path = match std::env::var(&CFG_PATH_ENV_KEY) {
         Ok(path) => {
             println!("Env var {} is set, configs will be read from {}", &CFG_PATH_ENV_KEY, &path);
@@ -32,16 +40,26 @@ pub fn read_configs() -> Result<Properties, Error> {
         }
     };
 
-    let cfg_file = File::open(cfg_path + "properties.yaml")?;
+    let cfg_file = File::open(cfg_path.clone() + CFG_PROPS_FILE)?;
     let cfg_reader = BufReader::new(cfg_file);
 
-    Ok(serde_yaml::from_reader::<BufReader<File>, Properties>(cfg_reader)?)
+    let props = serde_yaml::from_reader::<BufReader<File>, Properties>(cfg_reader)?;
+
+    if props.client_range_max_size > props.etcd_fetch_range_size {
+        return Err(Error::Validation("Bad configs. client_range_max_size must be less than or equal to etcd_fetch_range_size".to_string()))
+    }
+
+    Ok(Configs{
+        props,
+        logs_cfg_path: cfg_path + CFG_LOG_FILE,
+    })
 }
 
 #[derive(Debug)]
 pub enum Error{
     IO(std::io::Error),
     Deserialization(serde_yaml::Error),
+    Validation(String)
 }
 
 impl From<std::io::Error> for Error {

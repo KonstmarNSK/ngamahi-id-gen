@@ -17,12 +17,12 @@ pub struct EtcdClient {
 
 impl EtcdClient {
 
-    pub async fn next_range(&self, seq_name: String, range_size: u32) -> Result<Range, EtcdErr> {
+    pub async fn next_range(&self, seq_name: String, range_size: u64) -> Result<Range, EtcdErr> {
 
         let mut old_value = get_range(seq_name.clone(), &self.client, self.host_addr.clone()).await?;
 
         for _ in 0..5 { //todo: make a property
-            let new_value = old_value + (range_size as u64);
+            let new_value = old_value + range_size;
 
             let tx = EnlargeSeqTx::new(seq_name.clone(), old_value, new_value);
             let tx_result = tx.exec(self.host_addr.clone(), &self.client).await;
