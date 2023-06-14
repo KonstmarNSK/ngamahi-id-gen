@@ -1,0 +1,27 @@
+refresh_rate: 30 seconds
+appenders:
+  stdout:
+    kind: console
+  requests:
+    kind: file
+    path: "./log/requests.log"
+    encoder:
+      pattern: "{d} - {m}{n}"
+  warnings:
+    kind: file
+    path: "./log/warnings.log"
+    encoder:
+      pattern: "{d} - {m}{n}"
+
+root:
+  level: warn
+  appenders:
+    - stdout
+    - warnings
+
+loggers:
+  actix_server:
+    level: info
+    appenders:
+      - requests
+    additive: true
