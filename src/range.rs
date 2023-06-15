@@ -1,5 +1,5 @@
 use serde::Serialize;
-use crate::cache::client::CacheClient;
+use crate::cache::CacheClient;
 use crate::config::Properties;
 use crate::etcd_client::{EtcdClient, EtcdErr};
 

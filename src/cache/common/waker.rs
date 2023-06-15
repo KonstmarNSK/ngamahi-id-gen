@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::task::{Context, Poll};
 use atomic_waker::AtomicWaker;
-use crate::cache::Range;
+use crate::range::Range;
+
+// A response from cache
 
 
 struct Inner {

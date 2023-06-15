@@ -1,36 +1,45 @@
-use std::sync::mpsc::Sender;
-use crate::cache::cache::Cache;
-use crate::cache::client::CacheClient;
-use crate::cache::waker::{Flag, GetResult};
-use crate::Range;
+use crate::range::Range;
 
-pub mod cache;
-pub mod client;
-mod waker;
+mod common;
+mod thread_local;
+mod cache_map;
 
 
-
-pub struct MsgGet{
-    key: String,
-    range_size: u64,
-
-    result: GetResult,
+pub fn new_common() -> CacheClient {
+    CacheClient::Common(common::new())
 }
 
-pub struct MsgPut{
-    key: String,
-    value: Range,
-
-    result: Flag,
-}
-
-pub enum Msg {
-    GetFromCache(MsgGet),
-    PutToCache(MsgPut),
-    Stop
+pub fn new_thread_local() -> CacheClient {
+    CacheClient::ThreadLocal(thread_local::new())
 }
 
 
-pub fn new_cache() -> CacheClient {
-    Cache::new()
+#[derive(Clone)]
+pub enum CacheClient{
+    Common(common::CacheClient),
+    ThreadLocal(thread_local::Cache)
+}
+
+
+impl CacheClient {
+    pub async fn put(&self, key: String, value: Range) {
+        match self {
+            CacheClient::Common(c) => c.put(key, value).await,
+            CacheClient::ThreadLocal(tl) => tl.put(key, value).await,
+        }
+    }
+
+    pub async fn get(&self, key: String, range_size: u64) -> (Vec<Range>, u64) {
+        match self {
+            CacheClient::Common(c) => c.get(key, range_size).await,
+            CacheClient::ThreadLocal(tl) => tl.get(key, range_size).await,
+        }
+    }
+
+    pub async fn stop(&self) {
+        match self {
+            CacheClient::Common(c) => c.stop().await,
+            CacheClient::ThreadLocal(tl) => tl.stop().await,
+        }
+    }
 }

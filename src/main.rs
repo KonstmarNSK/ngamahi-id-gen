@@ -16,8 +16,7 @@ use log::{info, warn};
 use crate::config::Properties;
 use crate::range::{Range, RangeProvider};
 use crate::api_endpoints::{get_next_range, create_seq};
-use crate::cache::cache::Cache;
-use crate::cache::client::CacheClient;
+use crate::cache::CacheClient;
 
 
 #[actix_web::main]
@@ -27,7 +26,7 @@ async fn main() -> std::io::Result<()> {
 
     log4rs::init_file(logger_cfg, Default::default()).unwrap();
 
-    let cache = Cache::new();
+    let cache = cache::new_thread_local();
 
     HttpServer::new(move || {
         App::new()
@@ -43,8 +42,8 @@ async fn main() -> std::io::Result<()> {
 
 
 fn get_app_data(props: Properties, cache: CacheClient) -> AppData {
-    let client = awc::Client::default();
-    let client = EtcdClient { client, host_addr: (&props.etcd_addr).clone() };
+    let http_client = awc::Client::default();
+    let client = EtcdClient { client: http_client, host_addr: (&props.etcd_addr).clone() };
 
     AppData {
         seq_provider: RangeProvider {
@@ -72,7 +71,7 @@ pub async fn do_test() {
 
     println!("creating cache");
 
-    let cache = cache::new_cache();
+    let cache = cache::new_common();
 
     let rng = Range {
         begin: 0,

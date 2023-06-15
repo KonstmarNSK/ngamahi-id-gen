@@ -1,67 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::thread;
-use crate::cache::client::CacheClient;
-use crate::cache::Msg;
-use crate::Range;
-use crate::range::{get_range_size, split_range};
+use crate::range::{get_range_size, Range, split_range};
 
+pub type CacheMap = HashMap<String, Vec<Range>>;
 
-type CacheMap = HashMap<String, Vec<Range>>;
-
-
-pub struct Cache {
-    values: CacheMap,
-    channel: Receiver<Msg>
+pub fn new() -> CacheMap {
+    HashMap::new()
 }
 
 
-impl Cache {
-    pub fn new() -> CacheClient {
-        let (s, r) = mpsc::channel::<Msg>();
-
-        let client = CacheClient{ channel: s };
-        let mut cache = Cache { values: Default::default(), channel: r };
-
-        thread::spawn(move || {
-            let mut c = cache;
-
-            for msg in c.channel {
-                match msg {
-                    Msg::GetFromCache(g) => {
-                        println!("Getting value 2");
-
-                        let result = get_range(g.key, g.range_size, &mut c.values);
-
-                        println!("Got: {:?}", result);
-
-                        g.result.signal(result);
-                    },
-
-                    Msg::PutToCache(p) => {
-                        println!("Putting value 2");
-
-                        store_range(p.key,  p.value, &mut c.values);
-
-                        println!("Now cache is {:?}", &c.values);
-                        p.result.signal();
-                    },
-
-                    Msg::Stop => break
-                }
-            }
-        });
-
-        return client;
-    }
-}
-
-
-
-
-fn store_range(seq_name: String, range: Range, map: &mut CacheMap) -> () {
+pub fn store_range(seq_name: String, range: Range, map: &mut CacheMap) -> () {
     let mut default = Vec::<Range>::new();
     let mut ranges = map.get_mut(&seq_name);
 
@@ -73,7 +21,7 @@ fn store_range(seq_name: String, range: Range, map: &mut CacheMap) -> () {
     }
 }
 
-fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Range>, u64) {
+pub fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Range>, u64) {
     let mut ranges = match map.get_mut(&seq_name) {
         Some(r) => r,
         None => return (vec![], range_size)
@@ -125,7 +73,6 @@ fn get_range(seq_name: String, range_size: u64, map: &mut CacheMap) -> (Vec<Rang
 
                 result.push(next_range)
             }
-
         }
     }
 }
