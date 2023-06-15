@@ -14,8 +14,6 @@ pub async fn get_next_range(data: web::Data<AppData>, path: web::Path<String>, q
     let next_range = data.seq_provider.get_next_range(
         seq_id,
         query.size.to_owned(),
-        (&data.client_range_max_size).to_owned(),
-        &data.cache,
     ).await;
 
     match next_range {

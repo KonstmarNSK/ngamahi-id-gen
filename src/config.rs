@@ -45,8 +45,8 @@ pub fn read_configs() -> Result<Configs, Error> {
 
     let props = serde_yaml::from_reader::<BufReader<File>, Properties>(cfg_reader)?;
 
-    if props.client_range_max_size > props.etcd_fetch_range_size {
-        return Err(Error::Validation("Bad configs. client_range_max_size must be less than or equal to etcd_fetch_range_size".to_string()))
+    if props.client_range_max_size >= props.etcd_fetch_range_size {
+        return Err(Error::Validation("Bad configs. client_range_max_size must be less than etcd_fetch_range_size".to_string()))
     }
 
     Ok(Configs{

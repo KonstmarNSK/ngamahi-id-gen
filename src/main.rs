@@ -27,10 +27,12 @@ async fn main() -> std::io::Result<()> {
 
     log4rs::init_file(logger_cfg, Default::default()).unwrap();
 
+    let cache = Cache::new();
+
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .app_data(Data::new(get_app_data(configs.props.clone())))
+            .app_data(Data::new(get_app_data(configs.props.clone(), cache.clone())))
             .service(get_next_range)
             .service(create_seq)
     })
@@ -40,16 +42,17 @@ async fn main() -> std::io::Result<()> {
 }
 
 
-fn get_app_data(props: Properties) -> AppData {
+fn get_app_data(props: Properties, cache: CacheClient) -> AppData {
     let client = awc::Client::default();
     let client = EtcdClient { client, host_addr: (&props.etcd_addr).clone() };
-    let cache = Cache::new();
 
     AppData {
-        seq_provider: RangeProvider { etcd_client: client },
-        etcd_fetch_range_size: props.etcd_fetch_range_size,
-        client_range_max_size: props.client_range_max_size,
-        cache,
+        seq_provider: RangeProvider {
+            etcd_client: client,
+            cache,
+            etcd_fetch_size: props.etcd_fetch_range_size,
+            max_client_range_size: props.client_range_max_size
+        },
     }
 }
 
@@ -58,9 +61,6 @@ fn get_app_data(props: Properties) -> AppData {
 #[derive(Clone)]
 pub struct AppData {
     seq_provider: RangeProvider,
-    etcd_fetch_range_size: u64,
-    client_range_max_size: u64,
-    cache: CacheClient,
 }
 
 
