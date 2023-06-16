@@ -20,15 +20,15 @@ use crate::cache::CacheClient;
 
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let configs = config::read_configs().unwrap();
+async fn main() -> Result<(), Error> {
+    let configs = config::read_configs()?;
     let logger_cfg = &configs.logs_cfg_path;
 
-    log4rs::init_file(logger_cfg, Default::default()).unwrap();
+    log4rs::init_file(logger_cfg, Default::default())?;
 
     let cache = cache::new_thread_local();
 
-    HttpServer::new(move || {
+    Ok(HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(Data::new(get_app_data(configs.props.clone(), cache.clone())))
@@ -37,7 +37,7 @@ async fn main() -> std::io::Result<()> {
     })
         .bind(("127.0.0.1", 8080))?
         .run()
-        .await
+        .await?)
 }
 
 
@@ -62,6 +62,30 @@ pub struct AppData {
     seq_provider: RangeProvider,
 }
 
+#[derive(Debug)]
+enum Error{
+    Io(std::io::Error),
+    Config(config::Error),
+    Anyhow(anyhow::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<config::Error> for Error {
+    fn from(value: config::Error) -> Self {
+        Self::Config(value)
+    }
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(value: anyhow::Error) -> Self {
+        Self::Anyhow(value)
+    }
+}
 
 
 

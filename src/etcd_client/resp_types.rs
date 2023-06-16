@@ -12,6 +12,13 @@ pub(in crate::etcd_client) struct Header {
 
 //===========|  RANGE  |=============
 
+#[derive(Serialize, Deserialize)]
+pub(in crate::etcd_client) struct RangeResponse {
+    pub header: Header,
+    pub kvs: Option<Vec<RangeResult>>,
+    pub count: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub(in crate::etcd_client) struct RangeResult {
     pub key: Option<String>,
@@ -20,17 +27,6 @@ pub(in crate::etcd_client) struct RangeResult {
     pub version: Option<String>,
     pub value: Option<String>,
 }
-
-
-#[derive(Serialize, Deserialize)]
-pub(in crate::etcd_client) struct RangeResponse {
-    pub header: Header,
-    pub kvs: Option<Vec<RangeResult>>,
-    pub count: Option<String>,
-}
-
-//===================================
-
 
 
 
@@ -46,42 +42,16 @@ pub(in crate::etcd_client) struct ResponsePut {
 
 
 
-//=============| TX CREATE SEQ RESPONSE  |======================
-
-#[derive(Serialize, Deserialize)]
-pub(in crate::etcd_client) struct TxCreateSeqResp {
-    pub header: Header,
-    pub succeeded: Option<bool>,
-    pub responses: Vec<OperationResult>,
-}
-
-//===============================================================
-
-
-
-
-
-//=============| TX ENLARGE SEQ RESPONSE  |======================
-
-#[derive(Serialize, Deserialize)]
-pub(in crate::etcd_client) struct ResponseRange {
-    pub header: Header,
-    pub kvs: Vec<RangeResult>,
-    pub count: String,
-}
-
 #[derive(Serialize, Deserialize)]
 pub(in crate::etcd_client) struct OperationResult {
-    pub response_range: Option<ResponseRange>,
+    pub response_range: Option<RangeResponse>,
     pub response_put: Option<ResponsePut>,
 }
 
+
 #[derive(Serialize, Deserialize)]
-pub(in crate::etcd_client) struct TxEnlargeSeqResp {
+pub(in crate::etcd_client) struct TxResp {
     pub header: Header,
     pub succeeded: Option<bool>,
     pub responses: Vec<OperationResult>,
 }
-
-
-//===============================================================
