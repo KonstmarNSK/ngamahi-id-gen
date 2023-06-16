@@ -26,7 +26,7 @@ async fn main() -> Result<(), Error> {
 
     log4rs::init_file(logger_cfg, Default::default())?;
 
-    let cache = cache::new_thread_local();
+    let cache = cache::new_common();
 
     Ok(HttpServer::new(move || {
         App::new()
