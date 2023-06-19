@@ -19,3 +19,14 @@ pub(in crate::cache) fn new() -> CacheClient {
     cache::Cache::new()
 }
 
+
+//
+// #[cfg(test)]
+// fn check_put() {
+//     let cache = new();
+//
+//     futures::executor::block_on( || {
+//         cache.put()
+//     })
+// }
+

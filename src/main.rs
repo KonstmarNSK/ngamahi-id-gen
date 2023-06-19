@@ -3,13 +3,14 @@ mod cache;
 mod range;
 mod api_endpoints;
 mod config;
+mod tests;
 
 use std::convert::Infallible;
 use std::future::Future;
 use actix_web::{App, get, HttpResponse, HttpServer, post, Responder, web};
 use actix_web::web::{BufMut, Data};
 use awc::error::{PayloadError, SendRequestError};
-use crate::etcd_client::{EtcdClient, EtcdErr};
+use crate::etcd_client::{EtcdClient, EtcdErr, HttpClient};
 use actix_web::middleware::Logger;
 use log4rs;
 use log::{info, warn};
@@ -18,7 +19,7 @@ use crate::range::{Range, RangeProvider};
 use crate::api_endpoints::{get_next_range, create_seq};
 use crate::cache::CacheClient;
 
-
+#[cfg(not(test))]
 #[actix_web::main]
 async fn main() -> Result<(), Error> {
     let configs = config::read_configs()?;
@@ -26,12 +27,12 @@ async fn main() -> Result<(), Error> {
 
     log4rs::init_file(logger_cfg, Default::default())?;
 
-    let cache = cache::new_common();
+    let cache = cache::new_thread_local();
 
     Ok(HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .app_data(Data::new(get_app_data(configs.props.clone(), cache.clone())))
+            .app_data(Data::new(get_app_data_prod(configs.props.clone(), cache.clone())))
             .service(get_next_range)
             .service(create_seq)
     })
@@ -41,9 +42,15 @@ async fn main() -> Result<(), Error> {
 }
 
 
-fn get_app_data(props: Properties, cache: CacheClient) -> AppData {
-    let http_client = awc::Client::default();
-    let client = EtcdClient { client: http_client, host_addr: (&props.etcd_addr).clone() };
+#[cfg(not(test))]
+fn get_app_data_prod(props: Properties, cache: CacheClient) -> AppData {
+    let http_client = etcd_client::new_http_client(awc::Client::default());
+
+    get_app_data(props, cache, http_client)
+}
+
+pub fn get_app_data(props: Properties, cache: CacheClient, http_client: HttpClient) -> AppData {
+    let client = etcd_client::new_etcd_client(http_client, (&props.etcd_addr).clone());
 
     AppData {
         seq_provider: RangeProvider {
@@ -63,7 +70,7 @@ pub struct AppData {
 }
 
 #[derive(Debug)]
-enum Error{
+pub enum Error{
     Io(std::io::Error),
     Config(config::Error),
     Anyhow(anyhow::Error),

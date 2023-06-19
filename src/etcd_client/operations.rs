@@ -4,12 +4,14 @@ use base64::{Engine as _, engine::{self, general_purpose}, alphabet, DecodeError
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use serde_json::Error;
+use crate::etcd_client::http_client::make_request;
+use crate::etcd_client::HttpClient;
 use crate::etcd_client::req_types::{CompareResult, CompareTarget, Comparison, OperationRequest, RequestPut, RequestRange, Target, Transaction};
 use crate::etcd_client::resp_types::{RangeResponse, TxResp};
 
 
 /// Get current value of given sequence
-pub async fn get_range(seq_id: String, client: &awc::Client, host: String) -> Result<u64, GetRangeErr> {
+pub async fn get_range(seq_id: String, client: &HttpClient, host: String) -> Result<u64, GetRangeErr> {
     let url = host + "/v3/kv/range";
     let encoded_seq_name = general_purpose::STANDARD.encode(seq_id.as_str());
     let body = RequestRange { key: encoded_seq_name };
@@ -46,7 +48,7 @@ pub struct CreateSeqTx {
 
 
 impl EnlargeSeqTx {
-    pub async fn exec(self, mut host: String, client: &awc::Client) -> Result<(), EnlargeTxErr> {
+    pub async fn exec(self, mut host: String, client: &HttpClient) -> Result<(), EnlargeTxErr> {
         let response = execute_tx::<TxResp>(&self.tx, host, client).await?;
 
         return if let Some(true) = response.succeeded {
@@ -59,7 +61,7 @@ impl EnlargeSeqTx {
 
 
 impl CreateSeqTx {
-    pub async fn exec(self, mut host: String, client: &awc::Client) -> Result<(), CreateSeqTxErr> {
+    pub async fn exec(self, mut host: String, client: &HttpClient) -> Result<(), CreateSeqTxErr> {
         let response = execute_tx::<TxResp>(&self.tx, host, client).await?;
 
         return if let Some(true) = response.succeeded {
@@ -181,7 +183,7 @@ fn num_from_base64(encoded: &str) -> Result<u64, Base64DecodeErr> {
 }
 
 
-async fn execute_tx<TResp>(tx: &Transaction, mut host: String, client: &awc::Client) -> Result<TResp, EtcdInteropErr>
+async fn execute_tx<TResp>(tx: &Transaction, mut host: String, client: &HttpClient) -> Result<TResp, EtcdInteropErr>
     where
         TResp: DeserializeOwned
 {
@@ -189,16 +191,6 @@ async fn execute_tx<TResp>(tx: &Transaction, mut host: String, client: &awc::Cli
     host.push_str("/v3/kv/txn");
 
     make_request::<TResp>(tx, host, client).await
-}
-
-async fn make_request<TResp>(body: String, url: String, client: &awc::Client) -> Result<TResp, EtcdInteropErr>
-    where
-        TResp: DeserializeOwned
-{
-    let req = client.post(url).insert_header(("User-Agent", "id-gen/1.0"));
-
-    let mut res = req.send_body(body).await?;
-    Ok(res.json::<TResp>().limit(2000).await.map_err(|e| DeserializeErr::JsonPayload(e))?)
 }
 
 
