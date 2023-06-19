@@ -45,7 +45,34 @@ impl From<GetRangeErr> for EtcdErr {
     }
 }
 
-
-
+//
+// #[cfg(test)]
+// mod tests{
+//     use std::collections::HashMap;
+//     use std::sync::{Arc, Mutex};
+//     use crate::etcd_client::http_client::MockClient;
+//
+//
+//     #[test]
+//     pub fn do_test() {
+//         let a: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
+//
+//         let seq_name = "some-seq";
+//
+//         let must_fail = |seq_id, host| None;
+//         let process_req = |seq_id, host| {
+//             match seq_id.as_str() {
+//                 seq if seq == seq_name =>
+//             }
+//         };
+//
+//         let client = MockClient{
+//             must_fail: Arc::new(Box::new(must_fail)),
+//             get_response: Arc::new(Box::new(process_req)),
+//         };
+//     }
+// }
+//
+//
 
 
