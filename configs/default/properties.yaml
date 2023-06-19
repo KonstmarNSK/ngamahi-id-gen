@@ -1,5 +1,5 @@
 # Rest api endpoint of etcd
-etcd_addr: "http://localhost:2379"
+etcd_addr: "http://etcd-db:2379"
 
 # size of range that id server prefetches from etcd and pushes to local cache
 etcd_fetch_range_size: 5000

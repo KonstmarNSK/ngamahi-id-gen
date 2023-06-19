@@ -22,6 +22,8 @@ use crate::cache::CacheClient;
 #[cfg(not(test))]
 #[actix_web::main]
 async fn main() -> Result<(), Error> {
+    println!("Started");
+
     let configs = config::read_configs()?;
     let logger_cfg = &configs.logs_cfg_path;
 
@@ -36,7 +38,7 @@ async fn main() -> Result<(), Error> {
             .service(get_next_range)
             .service(create_seq)
     })
-        .bind(("127.0.0.1", 8080))?
+        .bind(("0.0.0.0", 8080))?
         .run()
         .await?)
 }

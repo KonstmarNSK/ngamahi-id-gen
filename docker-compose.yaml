@@ -1,0 +1,36 @@
+# For testing only
+version: "3.9"
+
+services:
+  id-gen-service:
+    build: ./
+    ports:
+      - 8080:8080
+    environment:
+      - ID_GEN_CFG_PATH=/app/configs/default/
+    depends_on:
+      - etcd-db
+
+  etcd-db:
+    image: gcr.io/etcd-development/etcd:v3.4.26
+    entrypoint: /usr/local/bin/etcd
+    ports:
+      - 2379:2379
+    command:
+      - '--name=s1'
+      - '--data-dir=/etcd-data'
+      - '--listen-client-urls=http://0.0.0.0:2379'
+      - '--advertise-client-urls=http://0.0.0.0:2379'
+      - '--listen-peer-urls=http://0.0.0.0:2380'
+      - '--initial-advertise-peer-urls=http://0.0.0.0:2380'
+      - '--initial-cluster=s1=http://0.0.0.0:2380'
+      - '--initial-cluster-token=tkn'
+      - '--initial-cluster-state=new'
+      - '--log-level=info'
+      - '--logger=zap'
+      - '--log-outputs=stderr'
+    volumes:
+      - ./etcd-vol-ids:/etcd-data
+
+# docker compose build --no-cache
+# docker compose up
